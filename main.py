@@ -114,7 +114,7 @@ def stage2_topic_modeling():
         n_components=5,
         min_cluster_size=40,
         min_samples=10,
-        Verbose=True,
+        verbose=True,
         n_jobs=20,  # 使用20個CPU核心
         low_memory=False  # 高性能模式
     )

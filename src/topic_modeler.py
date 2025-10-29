@@ -53,7 +53,8 @@ class TopicModeler:
         cluster_selection_method: str = 'eom',
         # 並行計算參數
         n_jobs: int = -1,
-        low_memory: bool = False
+        low_memory: bool = False,
+        verbose: bool = False
     ):
         """
         初始化主題建模器
@@ -92,6 +93,7 @@ class TopicModeler:
         # 並行計算參數
         self.n_jobs = n_jobs
         self.low_memory = low_memory
+        self.verbose = verbose
 
         # 建立目錄
         self.models_path.mkdir(parents=True, exist_ok=True)
@@ -203,7 +205,7 @@ class TopicModeler:
             random_state=42,
             n_jobs=self.n_jobs,  # 啟用多線程
             low_memory=self.low_memory,
-            verbose=True
+            verbose=self.verbose
         )
 
         # 配置HDBSCAN（啟用並行計算）
