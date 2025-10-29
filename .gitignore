@@ -20,12 +20,11 @@ wheels/
 .installed.cfg
 *.egg
 
-# 虛擬環境
+# Virtual Environment
 .venv/
 venv/
 ENV/
 env/
-.conda/
 
 # IDE
 .vscode/
@@ -33,55 +32,32 @@ env/
 *.swp
 *.swo
 *~
-.DS_Store
 
-# Jupyter Notebook
-.ipynb_checkpoints
-*.ipynb_checkpoints/
-
-# 環境變數與配置
+# Environment Variables
 .env
-*.env
-!.env.example
-config.json
-secrets.json
 
-# 資料目錄 (避免提交大量數據)
-data/raw_reports/
-data/processed_corpus/
+# Data (保護敏感資料)
+data/raw/
+data/processed_corpus/*.csv
 data/models/
 data/results/
-*.csv
-*.pkl
-*.npy
-*.npz
-*.h5
-*.hdf5
+data/metadata/*.csv
 
-# 保留目錄結構
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 保留目錄結構但不提交內容
 !data/.gitkeep
-!data/raw_reports/.gitkeep
+!data/raw/.gitkeep
+!data/metadata/.gitkeep
 !data/processed_corpus/.gitkeep
 !data/models/.gitkeep
 !data/results/.gitkeep
-
-# 日誌檔案
-*.log
-logs/
-
-# 測試覆蓋率
-.coverage
-htmlcov/
-.pytest_cache/
-.tox/
-
-# 文件
-*.pdf
-*.docx
-*.html
-
-# 臨時檔案
-*.tmp
-*.bak
-temp/
-tmp/

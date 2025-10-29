@@ -2,141 +2,213 @@
 
 **目標**: 建構一個自動化框架，用於爬取企業 ESG 報告，進行主題建模，將主題映射至數位韌性構面，並最終產出量化的數位韌性分數。
 
-**技術棧**: Python, UV (套件管理), Pandas, BERTopic, OpenAI API, Scikit-learn, NLTK。
+**技術棧**: Python, UV (套件管理),jupyter, Pandas, BERTopic, OpenAI API, Scikit-learn, NLTK。
 
 **AI 助手規則**:
 1.  **理解優先**: 在執行每個任務前，請確保完全理解其目的、輸入、輸出和相關依賴。
 2.  **模組化**: 嚴格按照定義的模組邊界開發功能，確保低耦合、高內聚。
-3.  **可配置性**: 將所有重要參數（如 API 金鑰、模型名稱、檔案路徑、閾值等）集中管理，建議使用 `.env` 檔案或 YAML 配置文件。
+3.  **可配置性**: 將所有重要參數（如 API 金鑰、模型名稱、檔案路徑、閾值等）集中管理，使用 `.env` 檔案或 YAML 配置文件。
 4.  **錯誤處理**: 為所有 I/O 操作、API 呼叫和潛在的計算錯誤添加健壯的錯誤處理邏輯 (try-except)。
 5.  **日誌記錄**: 加入適當的日誌記錄 (logging 模組)，記錄關鍵步驟、錯誤和警告。
 6.  **遵循語法**: 嚴格遵守 Python 語法和 PEP 8 規範。
 7.  **測試驅動**: 為核心功能編寫單元測試 (Unit Tests) 和整合測試 (Integration Tests)。
 8.  **版本控制**: 使用 Git 進行版本控制，遵循 `.gitignore` 檔案規則。
-9.  **註解**: 使用繁體中文註解，不要用emoji，必須簡要，不繁雜 
+9.  **註解**: 使用繁體中文註解，不要用emoji，必須簡要，不繁雜
 
 ---
 
 ## 階段 0: 環境設定與專案結構
 
-* **[x] 任務 0.1**: 安裝 UV
+* **[ ] 任務 0.1**: 安裝 UV
     * **說明**: 根據 UV 官方文件安裝 UV 套件管理器。
-    * **指令參考**: `curl -LsSf https://astral.sh/uv/install.sh | sh` 或 `pip install uv` (取決於系統)
-    * **狀態**: 已完成 - UV 0.8.16 已安裝
+    * **指令參考**: `pip install uv`
+    * **狀態**: 待實作
 
-* **[x] 任務 0.2**: 建立虛擬環境
+* **[ ] 任務 0.2**: 建立虛擬環境
     * **說明**: 使用 UV 建立一個新的 Python 虛擬環境。
     * **指令參考**: `uv venv <環境名稱>` (例如: `uv venv .venv`)
     * **驗證**: 成功建立 `.venv` 目錄。
-    * **狀態**: 已完成 - 使用 Python 3.13.2
+    * **狀態**: 待實作 - 使用 Python 3.12
 
-* **[x] 任務 0.3**: 啟動虛擬環境
+* **[ ] 任務 0.3**: 啟動虛擬環境
     * **說明**: 啟動 UV 建立的虛擬環境。
     * **指令參考**: `source .venv/bin/activate` (Linux/macOS) 或 `.venv\Scripts\activate` (Windows)
-    * **狀態**: 已完成 - 環境已建立，使用時需手動啟動
+    * **狀態**: 待實作
 
-* **[x] 任務 0.4**: 安裝依賴套件
-    * **說明**: 使用 UV 根據 `requirements.txt` 檔案安裝所有必要的 Python 套件。
-    * **指令參考**: `uv pip install -r requirements.txt` 。
-    * **參考檔案**: `requirements.txt`
+* **[ ] 任務 0.4**: 安裝依賴套件
+    * **說明**: 使用 UV 根據 `pyproject.toml` 檔案安裝所有必要的 Python 套件。
+    * **指令參考**
+    * **參考檔案**: `pyproject.toml`
     * **驗證**: 執行 `uv pip list` 檢查是否所有套件都已安裝。
-    * **狀態**: 已建立 requirements.txt (UV 不支援 Conda 的 environment.yml 格式)
-
-* **[x] 任務 0.5**: 設定專案結構
+    * **狀態**: 待實作
+* **[ ] 任務 0.5**: 設定專案結構
     * **說明**: 建立標準的 Python 專案目錄結構。
     * **結構建議**:
         ```
         project_root/
         ├── .venv/               # 虛擬環境 (由 uv 創建)
         ├── data/                # 數據目錄 (受 .gitignore 保護)
-        │   ├── raw_reports/     # 原始下載的報告
+        │   ├── raw/     # 原始下載的報告 (PDF)
+        │   ├── metadata/        # 爬蟲 manifest
         │   ├── processed_corpus/ # 處理後的語料庫 (如 corpus.csv)
         │   ├── models/          # 儲存的模型 (BERTopic)
-        │   └── results/         # 最終結果 (分數, DRI)
+        │   ├── results/         # 最終結果 (分數, DRI)
+        │   └── sp500.csv        # s&p500公司列表
         ├── src/                 # 原始碼目錄
         │   ├── __init__.py
-        │   ├── crawler.py       # 爬蟲與預處理模組
+        │   ├── esg_crawler.py   # ESG 報告爬蟲 (Brave API)
+        │   ├── data_loader.py   # 資料載入與預處理
+        │   ├── semantic_chunker.py # 語義分塊模組
         │   ├── topic_modeler.py # 主題建模模組
         │   ├── mapper.py        # 主題映射模組
-        │   ├── scorer.py        # 分數計算模組
-        │   └── utils.py         # 輔助函數
-        ├── notebooks/           # Jupyter Notebooks (如 main.ipynb)
+        │   └── scorer.py        # 分數計算模組
+        ├── notebooks/           # Jupyter Notebooks (main.ipynb:從src調用函數) 
         ├── tests/               # 測試程式碼
         ├── .env                 # 環境變數 (API Keys, etc.)
+        ├── .env.example         # 環境變數範例
         ├── .gitignore           # Git 忽略檔案
-        ├── requirements.txt     # 套件依賴
-        └── main.py              # 主執行腳本 (CLI 介面)
+        ├── pyproject.toml
+        ├── main.py              # 主執行腳本 (CLI 介面)
+        └── plan.md              # 開發計畫、TODO list
         ```
     * **參考檔案**: `.gitignore`
     * **驗證**: 目錄結構符合建議。
-    * **狀態**: 已完成 - 所有目錄和核心檔案已建立
+    * **狀態**: 待實作
 
-* **[x] 任務 0.6**: 設定環境變數
-    * **說明**: 建立 `.env` 檔案，並將 OpenAI API 金鑰等敏感資訊放入其中。
-    * **內容範例**: `OPENAI_API_KEY="sk-..."`
-    * **整合**: 確保 Python 程式碼能使用 `python-dotenv` 套件讀取此檔案。
-    * **狀態**: 已完成 - 已建立 .env.example 模板，使用者需複製並填入實際金鑰
+* **[ ] 任務 0.6**: 設定環境變數 (使用 python-dotenv)
+    * **說明**: 使用 `.env` 檔案管理所有 API 金鑰和配置參數。
+    * **步驟**:
+        1. 複製 `.env.example` 為 `.env`: `cp .env.example .env`
+        2. 編輯 `.env` 填入實際的 API 金鑰和配置
+        3. 確認 `.env` 已被 `.gitignore` 排除（避免洩漏金鑰）
+    * **必要的環境變數**:
+        * `brave_KEY` - brave API 金鑰
+        * `OPENAI_API_KEY` - OpenAI API 金鑰
+    * **可選的環境變數**:
+        * `EMBEDDING_MODEL` - 嵌入模型名稱（預設: text-embedding-3-small）
+        * `LLM_MODEL` - LLM 模型名稱（預設: gpt-5-nano-2025-08-07 注意:溫度必須為1）
+        * 路徑設定（預設使用相對路徑）
+    * **整合方式**:
+        ```python
+        from dotenv import load_dotenv
+        import os
 
----
+        # 載入環境變數
+        load_dotenv()
 
-## 階段 1: 爬蟲與預處理模組 (`src/crawler.py`)
-
-* **[ ] 任務 1.1**: 實現公司列表獲取
-    * **說明**: 獲取 Fortune Global 500 2018 年排行的前 200 家美國公司列表及其 Ticker Symbol。
-    * **方法**: 編寫爬蟲從Fortune 官網存檔爬取。
-    * **輸出**: Python 列表或元組，包含 200 個 Ticker Symbols。
-
-* **[ ] 任務 1.2**: 實現ESG報告下載
-    * **說明**: 根據公司列表，使用爬蟲下載 2017-01-01 至 2018-12-31 期間的ESG報告。
-    * **參考**: `src/data_download.py`
-    * **輸入**: 公司 Ticker 列表, 日期範圍。
-    * **輸出**: 下載的 HTML 文件存放在 `data/raw_reports/<TICKER>/<FILING_TYPE>/`。
-    * **重點**:
-        * 加入更詳細的錯誤處理 (例如，處理超時、無文件的情況)。
-        * 加入日誌記錄下載進度和錯誤。
-        * 將下載路徑設為可配置。
-
-* **[ ] 任務 1.3**: 實現 pdf 文本提取與清理
-    * **說明**: 從下載的pdf文件中提取純文本，並進行初步清理。
-    * **參考**: `src/data_processing.py`
-    * **輸入**: pdf 文件路徑。
-    * **輸出**: 清理後的純文本字串。
-    * **重點**:
-        * 處理多餘的換行符和空格。
-        * 添加錯誤處理 (處理無法解析的 pdf)。
-
-* **[ ] 任務 1.4**: 實現句子過濾
-    * **說明**: 過濾掉過短的句子和樣板化的法律聲明。
-    * **參考**: `src/data_processing.py` 的 NLTK 和關鍵詞過濾部分。
-    * **輸入**: 清理後的純文本字串。
-    * **輸出**: 過濾後的句子列表。
-    * **重點**:
-        * 使用 `nltk.sent_tokenize` 分句。
-        * 可配置的句子最小長度閾值。
-        * 可配置的樣板化關鍵詞列表。
-
-* **[ ] 任務 1.5**: 實現文本分塊 (Chunking)
-    * **說明**: 將長文本切分成大小適中、語義連貫的文本塊，以便後續嵌入和建模。
-    * **參考**: `src/data_processing.py` 的分塊邏輯（包含結構化和語義分塊）。
-    * **輸入**: 過濾後的句子列表。
-    * **輸出**: 文本塊列表。
-    * **重點**:
-        * 使用`SemanticChunker`，參考以下網址:https://github.com/brandonstarxel/chunking_evaluation/blob/main/chunking_evaluation/chunking/llm_semantic_chunker.py 、 https://research.trychroma.com/evaluating-chunking
-        * 使用 `tiktoken` 計算 token 數。
-        * 處理 API Rate Limit (加入 `time.sleep`)。
-
-* **[ ] 任務 1.6**: 建立最終語料庫
-    * **說明**: 將所有處理好的文本塊，連同其元數據 (公司 Ticker, 年份, 文件來源) 彙集成一個 CSV 檔案。
-    * **參考**: `src/data_processing.py` 的結尾部分。
-    * **輸入**: 所有公司、所有文件的文本塊列表及元數據。
-    * **輸出**: `data/processed_corpus/corpus.csv` (欄位: `ticker`, `year`, `doc_id`, `text`)。
-    * **重點**: 確保 `year` 的提取邏輯正確 (從文件名或文件夾名)。
-
-* **[ ] 任務 1.7**: 編寫 `crawler.py` 的主函數/類別
-    * **說明**: 將以上步驟整合為一個可執行的模組，例如一個 `Crawler` 類別，包含 `download_reports()`, `process_files()`, `build_corpus()` 等方法。
-    * **配置**: 從外部讀取公司列表、日期範圍、輸出路徑等。
+        # 讀取環境變數
+        config = {
+            'brave_key': os.getenv('BRAVE_KEY'),
+            'openai_api_key': os.getenv('OPENAI_API_KEY'),
+            'embedding_model': os.getenv('EMBEDDING_MODEL', 'text-embedding-3-small'),
+        }
+        ```
+    * **狀態**: 待實作
 
 ---
+
+## 階段 1: 資料載入與預處理模組
+
+**資料來源**:
+**方式**: Brave Search API 爬蟲 (`src/esg_crawler.py`) #已經完成，不需更改
+
+**環境變數需求** (必須在 `.env` 中設定):
+* `BRAVE_API_KEY` - 用於爬取 ESG 報告（推薦）
+* `OPENAI_API_KEY` - 用於語義分塊（可選，不提供則使用簡單分塊）
+* `EMBEDDING_MODEL` - 嵌入模型（預設: text-embedding-3-small）
+
+### 子階段 1A: ESG 報告爬蟲 (`src/esg_crawler.py`) #已經完成，不需更改
+
+* **[x] 任務 1A.1**: 實作 ESGCrawler 類別 #已經完成，不要更改，只需要讓main.ipynb可以調用
+    * **說明**: 使用 Brave Search API 自動搜尋並下載企業 ESG 報告 PDF
+    * **功能**:
+        * 使用 Brave Search API 搜尋 ESG 報告
+        * 支援批次爬取多家公司、多個年份
+        * 自動過濾並下載 PDF 檔案
+        * SHA-256 雜湊值避免重複下載
+        * 生成詳細 manifest 記錄
+        * 支援中斷續傳（resume 模式）
+    * **輸出**:
+        * PDF 檔案: `data/raw_reports/{ticker}/{year}/*.pdf`
+        * Manifest: `data/metadata/esg_manifest.csv`
+    * **狀態**: 已完成
+
+### 子階段 1B: 資料載入與預處理 (`src/data_loader.py`)
+
+* **[ ] 任務 1B.1**: 實現資料集探索與分析
+    * **說明**: 探索資料集結構，了解檔案組織方式、公司數量、報告年份分布等。
+    * **輸入**: `data/raw/` 目錄中的檔案（來自爬蟲）
+    * **輸出**: 資料集統計資訊（公司數量、檔案數量、年份範圍等）
+    * **重點**:
+        * 分析資料集的目錄結構
+        * 統計各公司的報告數量
+        * 載入PDF
+        * 記錄資料集基本資訊
+    * **狀態**: 待實作
+
+* **[ ] 任務 1B.2**: 實現 PDF 文本提取
+    * **說明**: 從爬蟲下載的 PDF 檔案提取文本內容
+    * **輸入**: PDF 檔案路徑
+    * **輸出**: 提取的純文本字串
+    * **工具**: PyPDF2、pdfplumber 或 pdfminer.six
+    * **重點**:
+        * 處理不同格式的 PDF
+        * 保留文本結構
+        * 錯誤處理（加密、損壞的 PDF）
+    * **狀態**: 待實作
+
+* **[ ] 任務 1B.3**: 實現文本載入與清理
+    * **說明**: 載入文本資料並進行初步清理
+    * **輸入**: 文本檔案路徑（TXT、CSV）或 PDF 提取文本
+    * **輸出**: 清理後的純文本字串
+    * **重點**:
+        * 處理多餘的換行符和空格
+        * 添加錯誤處理
+        * 記錄載入進度和錯誤
+    * **狀態**: 待實作
+
+* **[ ] 任務 1B.4**: 實現句子過濾
+    * **說明**: 過濾掉過短的句子和樣板化的法律聲明
+    * **輸入**: 清理後的純文本字串
+    * **輸出**: 過濾後的句子列表
+    * **重點**:
+        * 使用 `nltk.sent_tokenize` 分句
+        * 可配置的句子最小長度閾值
+        * 可配置的樣板化關鍵詞列表（如 "forward-looking statement", "safe harbor" 等）
+        * 記錄過濾統計資訊
+    * **狀態**: 待實作
+
+* **[ ] 任務 1B.5**: 實現文本分塊 (Chunking)
+    * **說明**: 將長文本切分成大小適中、語義連貫的文本塊，以便後續嵌入和建模
+    * **輸入**: 過濾後的句子列表
+    * **輸出**: 文本塊列表
+    * **重點**:
+        * 一定要使用`./llm_semantic_chunker.py`檔案來修改，作為方法
+        * 使用 `tiktoken` 計算 token 數
+        * 處理 API Rate Limit（加入 `time.sleep`）
+    * **狀態**: 待實作
+
+* **[ ] 任務 1B.6**: 建立最終語料庫
+    * **說明**: 將所有處理好的文本塊，連同其元數據（公司名稱、年份、文件來源）彙集成一個 CSV 檔案
+    * **輸入**: 所有公司、所有文件的文本塊列表及元數據
+    * **輸出**: `data/processed_corpus/corpus.csv`（欄位: `ticker`, `year`, `text`）
+    * **重點**:
+        * 從檔案名稱或路徑提取公司資訊和年份
+        * 確保資料完整性（無遺漏、無重複）
+        * 記錄統計資訊（總文本塊數、公司數、年份分布）
+    * **狀態**: 待實作
+
+* **[ ] 任務 1B.7**: 整合資料載入器類別
+    * **說明**: 將以上步驟整合為一個可執行的模組 `DataLoader` 類別
+    * **主要方法**:
+        * `explore_dataset()` - 探索資料集結構
+        * `load_text_data()` - 載入文本資料
+        * `process_files()` - 批次處理檔案（清理、過濾、分塊）
+        * `build_corpus()` - 建立最終語料庫
+    * **配置**: 從外部讀取 API 憑證、路徑、過濾參數等
+    * **重點**: 完整的錯誤處理、日誌記錄、進度追蹤
+    * **狀態**: 待實作
+
 
 ## 階段 2: 主題建模模組 (`src/topic_modeler.py`)
 
@@ -278,7 +350,7 @@
     * **說明**: 設計小型測試案例 (例如，使用少量文件)，測試從爬蟲到 DRI 計算的完整流程是否能順利運行。
     * **重點**: 檢查各模組之間的接口和數據傳遞是否正確。
 
-* **[ ] 任務 6.3**: (可選) LLM Agent 輸出驗證
+* **[ ] 任務 6.3**: LLM Agent 輸出驗證
     * **說明**: 設計測試檢查 LLM Agent 的輸出是否符合預期的 JSON 格式，以及分數是否在 0-10 範圍內。
 
 * **[ ] 任務 6.4**: 設定測試環境
@@ -286,7 +358,7 @@
 
 ---
 
-## 階段 7: 文件與部署 (可選)
+## 階段 7: 文件與部署
 
 * **[ ] 任務 7.1**: 編寫 README.md
     * **說明**: 撰寫專案說明文件，包含：
@@ -297,8 +369,8 @@
         * 模組架構
         * 輸出文件說明
 
-* **[ ] 任務 7.2**: (可選) 封裝為套件
+* **[ ] 任務 7.2**: 封裝為套件
     * **說明**: 使用 `pyproject.toml` 將專案封裝成可安裝的 Python 套件。
 
-* **[ ] 任務 7.3**: (可選) 建立 API 或 CLI
-    * **說明**: 使用 `FastAPI` 或 `Typer` 提供更友好的使用者介面。
+* **[ ] 任務 7.3**: 建立介面
+    * **說明**: 使用 `streamlit` 提供更友好的使用者介面。
