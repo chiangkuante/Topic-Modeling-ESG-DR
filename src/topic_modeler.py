@@ -218,10 +218,31 @@ class TopicModeler:
             core_dist_n_jobs=self.n_jobs  # 啟用多核心計算
         )
 
-        # 配置CountVectorizer
+        # 配置CountVectorizer with custom stop words
+        # 自定義停用詞列表
+        custom_stop_words = [
+            # Company Names
+            'cisco', 'marriott', 'kpmg', 'clorox', 'general motors', 'philip morris',
+            'sysco', 'ebay', 'gm', 'morris',
+            # General Terms
+            'firm', 'report', 'company', 'business', 'services', 'products',
+            'industry', 'employees', 'workforce', 'safety', 'training',
+            'compliance', 'program',
+            # Year-related Terms
+            '2017', '2018', '2019', '2020', '2021', '2022',
+            # Location/Region Terms
+            'asia', 'europe', 'america', 'pacific', 'latin america', 'latin',
+            'united states', 'uk', 'us'
+        ]
+
+        # 合併英文停用詞和自定義停用詞
+        from sklearn.feature_extraction import text
+        english_stop_words = text.ENGLISH_STOP_WORDS
+        all_stop_words = list(english_stop_words.union(set(custom_stop_words)))
+
         vectorizer_model = CountVectorizer(
             max_features=1000,
-            stop_words='english',
+            stop_words=all_stop_words,
             ngram_range=(1, 2)
         )
 
