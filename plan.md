@@ -19,29 +19,30 @@
 
 ## 階段 0: 環境設定與專案結構
 
-* **[ ] 任務 0.1**: 安裝 UV
+* **[✓] 任務 0.1**: 安裝 UV
     * **說明**: 根據 UV 官方文件安裝 UV 套件管理器。
     * **指令參考**: `pip install uv`
-    * **狀態**: 待實作
+    * **狀態**: ✅ 已完成
 
-* **[ ] 任務 0.2**: 建立虛擬環境
+* **[✓] 任務 0.2**: 建立虛擬環境
     * **說明**: 使用 UV 建立一個新的 Python 虛擬環境。
     * **指令參考**: `uv venv <環境名稱>` (例如: `uv venv .venv`)
     * **驗證**: 成功建立 `.venv` 目錄。
-    * **狀態**: 待實作 - 使用 Python 3.12
+    * **狀態**: ✅ 已完成 - 使用 Python 3.12
 
-* **[ ] 任務 0.3**: 啟動虛擬環境
+* **[✓] 任務 0.3**: 啟動虛擬環境
     * **說明**: 啟動 UV 建立的虛擬環境。
     * **指令參考**: `source .venv/bin/activate` (Linux/macOS) 或 `.venv\Scripts\activate` (Windows)
-    * **狀態**: 待實作
+    * **狀態**: ✅ 已完成
 
-* **[ ] 任務 0.4**: 安裝依賴套件
+* **[✓] 任務 0.4**: 安裝依賴套件
     * **說明**: 使用 UV 根據 `pyproject.toml` 檔案安裝所有必要的 Python 套件。
-    * **指令參考**
+    * **指令參考**: `uv pip install -e .`
     * **參考檔案**: `pyproject.toml`
     * **驗證**: 執行 `uv pip list` 檢查是否所有套件都已安裝。
-    * **狀態**: 待實作
-* **[ ] 任務 0.5**: 設定專案結構
+    * **狀態**: ✅ 已完成
+
+* **[✓] 任務 0.5**: 設定專案結構
     * **說明**: 建立標準的 Python 專案目錄結構。
     * **結構建議**:
         ```
@@ -62,7 +63,7 @@
         │   ├── topic_modeler.py # 主題建模模組
         │   ├── mapper.py        # 主題映射模組
         │   └── scorer.py        # 分數計算模組
-        ├── notebooks/           # Jupyter Notebooks (main.ipynb:從src調用函數) 
+        ├── notebooks/           # Jupyter Notebooks (main.ipynb:從src調用函數)
         ├── tests/               # 測試程式碼
         ├── .env                 # 環境變數 (API Keys, etc.)
         ├── .env.example         # 環境變數範例
@@ -73,20 +74,20 @@
         ```
     * **參考檔案**: `.gitignore`
     * **驗證**: 目錄結構符合建議。
-    * **狀態**: 待實作
+    * **狀態**: ✅ 已完成
 
-* **[ ] 任務 0.6**: 設定環境變數 (使用 python-dotenv)
+* **[✓] 任務 0.6**: 設定環境變數 (使用 python-dotenv)
     * **說明**: 使用 `.env` 檔案管理所有 API 金鑰和配置參數。
     * **步驟**:
         1. 複製 `.env.example` 為 `.env`: `cp .env.example .env`
         2. 編輯 `.env` 填入實際的 API 金鑰和配置
         3. 確認 `.env` 已被 `.gitignore` 排除（避免洩漏金鑰）
     * **必要的環境變數**:
-        * `brave_KEY` - brave API 金鑰
+        * `BRAVE_API_KEY` - Brave Search API 金鑰
         * `OPENAI_API_KEY` - OpenAI API 金鑰
     * **可選的環境變數**:
         * `EMBEDDING_MODEL` - 嵌入模型名稱（預設: text-embedding-3-small）
-        * `LLM_MODEL` - LLM 模型名稱（預設: gpt-5-nano-2025-08-07 注意:溫度必須為1）
+        * `LLM_MODEL` - LLM 模型名稱（預設: gpt-4o-mini）
         * 路徑設定（預設使用相對路徑）
     * **整合方式**:
         ```python
@@ -98,12 +99,20 @@
 
         # 讀取環境變數
         config = {
-            'brave_key': os.getenv('BRAVE_KEY'),
+            'brave_key': os.getenv('BRAVE_API_KEY'),
             'openai_api_key': os.getenv('OPENAI_API_KEY'),
             'embedding_model': os.getenv('EMBEDDING_MODEL', 'text-embedding-3-small'),
         }
         ```
-    * **狀態**: 待實作
+    * **狀態**: ✅ 已完成
+
+* **[✓] 任務 0.7**: 整合 Brave 爬蟲到 main.py
+    * **說明**: 將 `src/esg_crawler.py` 的功能整合到 `main.py` 作為 Stage 0 的可選功能
+    * **實現方式**:
+        * 新增 `stage0_crawl_pdfs()` 函數
+        * 新增命令行參數: `--crawl`, `--start-year`, `--end-year`, `--max-results`, `--throttle-sec`
+    * **使用方式**: `python main.py --stage 0 --crawl --start-year 2017 --end-year 2018`
+    * **狀態**: ✅ 已完成 (2025-10-29)
 
 ---
 

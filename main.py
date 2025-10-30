@@ -12,6 +12,11 @@ from dotenv import load_dotenv
 
 from src.data_loader import DataLoader, load_corpus
 from src.topic_modeler import TopicModeler, load_topic_model
+from src.esg_crawler import (
+    read_sp500_csv, read_company_map, load_keywords,
+    make_queries, brave_search, is_pdf_url, download_pdf,
+    safe_filename, sha256_bytes, content_type_pdf
+)
 
 # 載入環境變數
 load_dotenv()
@@ -60,6 +65,120 @@ def stage0_setup():
             logger.info(f"環境變數 {var} 已設定 ✓")
 
     logger.info("階段 0 完成\n")
+
+
+def stage0_crawl_pdfs(start_year=2017, end_year=2018, max_results=8, throttle_sec=1.0):
+    """階段0可選: 使用 Brave Search API 爬取 ESG PDF 報告"""
+    logger.info("=" * 50)
+    logger.info("階段 0 (可選): 爬取 ESG PDF 報告")
+    logger.info("=" * 50)
+
+    # 檢查 Brave API Key
+    brave_key = os.getenv('BRAVE_API_KEY')
+    if not brave_key:
+        logger.error("環境變數 BRAVE_API_KEY 未設定！")
+        logger.error("請在 .env 文件中添加: BRAVE_API_KEY=your_api_key")
+        return
+
+    import csv
+    import time
+
+    # 設置路徑
+    root = "."
+    sp500_csv = os.path.join(root, "data", "sp500_2017-01-27.csv")
+    manifest_path = os.path.join(root, "data", "metadata", "esg_manifest.csv")
+    raw_root = os.path.join(root, "data", "raw")
+
+    # 檢查 SP500 CSV 是否存在
+    if not os.path.exists(sp500_csv):
+        logger.error(f"找不到 SP500 CSV 文件: {sp500_csv}")
+        logger.error("請確保該文件存在後再運行爬蟲")
+        return
+
+    os.makedirs(os.path.dirname(manifest_path), exist_ok=True)
+    os.makedirs(raw_root, exist_ok=True)
+
+    years = list(range(start_year, end_year + 1))
+    kw = load_keywords(root)
+    report_keywords = kw.get("report_keywords", [])
+    tickers = read_sp500_csv(sp500_csv)
+    company_map = read_company_map(None)  # 可選的公司名稱映射
+
+    logger.info(f"爬取年份: {start_year}-{end_year}")
+    logger.info(f"公司數量: {len(tickers)}")
+    logger.info(f"報告關鍵詞: {report_keywords}")
+
+    write_header = not os.path.exists(manifest_path)
+    mf = open(manifest_path, "a", newline="", encoding="utf-8")
+    w = csv.writer(mf)
+    if write_header:
+        w.writerow(["ticker", "year", "url", "title", "source", "mime", "bytes", "sha256", "status"])
+
+    total_downloaded = 0
+    total_skipped = 0
+    total_errors = 0
+
+    for idx, tkr in enumerate(tickers, 1):
+        logger.info(f"處理 {idx}/{len(tickers)}: {tkr}")
+        name = company_map.get(tkr, None)
+        queries = make_queries(tkr, name, years, report_keywords)
+
+        for q in queries:
+            try:
+                results = brave_search(q, brave_key, max_results=max_results)
+                logger.info(f"  查詢: {q[:80]}... 找到 {len(results)} 個結果")
+            except Exception as e:
+                logger.error(f"  Brave Search 錯誤: {e}")
+                time.sleep(throttle_sec * 2)
+                continue
+
+            for (link, title) in results:
+                if not is_pdf_url(link):
+                    continue
+
+                year_in_q = None
+                for yy in years:
+                    if str(yy) in q:
+                        year_in_q = yy
+                        break
+                if year_in_q is None:
+                    continue
+
+                try:
+                    blob, headers = download_pdf(link)
+                    if blob:
+                        digest = sha256_bytes(blob)
+                        out_dir = os.path.join(raw_root, tkr, str(year_in_q))
+                        os.makedirs(out_dir, exist_ok=True)
+                        fname = safe_filename(f"{tkr}_{year_in_q}_{digest[:8]}.pdf")
+                        out_path = os.path.join(out_dir, fname)
+                        with open(out_path, "wb") as f:
+                            f.write(blob)
+                        w.writerow([tkr, year_in_q, link, title, "brave", "application/pdf", len(blob), digest, "downloaded"])
+                        total_downloaded += 1
+                        logger.info(f"    ✓ 下載: {fname} ({len(blob)} bytes)")
+                    else:
+                        w.writerow([tkr, year_in_q, link, title, "brave", (headers or {}).get("Content-Type", ""), "", "", "skipped_non_pdf"])
+                        total_skipped += 1
+                except Exception as e:
+                    w.writerow([tkr, year_in_q, link, title, "brave", "", "", "", f"error:{type(e).__name__}"])
+                    total_errors += 1
+                    logger.error(f"    ✗ 下載錯誤: {e}")
+
+                mf.flush()
+                time.sleep(throttle_sec)
+
+        time.sleep(throttle_sec * 2)
+
+    mf.close()
+
+    logger.info("=" * 50)
+    logger.info(f"爬取完成!")
+    logger.info(f"成功下載: {total_downloaded} 個 PDF")
+    logger.info(f"跳過: {total_skipped} 個")
+    logger.info(f"錯誤: {total_errors} 個")
+    logger.info(f"Manifest 位置: {manifest_path}")
+    logger.info("=" * 50)
 
 
 def stage1_data_loading(use_semantic_chunking=False):
@@ -166,6 +285,41 @@ def main():
         help='使用語義分塊（需要OpenAI API）'
     )
 
+    # Brave 爬蟲相關參數
+    parser.add_argument(
+        '--crawl',
+        action='store_true',
+        help='執行 Brave Search API 爬蟲（階段 0 可選）'
+    )
+
+    parser.add_argument(
+        '--start-year',
+        type=int,
+        default=2017,
+        help='爬蟲起始年份（預設: 2017）'
+    )
+
+    parser.add_argument(
+        '--end-year',
+        type=int,
+        default=2018,
+        help='爬蟲結束年份（預設: 2018）'
+    )
+
+    parser.add_argument(
+        '--max-results',
+        type=int,
+        default=8,
+        help='每次搜尋的最大結果數（預設: 8）'
+    )
+
+    parser.add_argument(
+        '--throttle-sec',
+        type=float,
+        default=1.0,
+        help='API 請求間隔秒數（預設: 1.0）'
+    )
+
     args = parser.parse_args()
 
     logger.info("=" * 50)
@@ -175,6 +329,15 @@ def main():
     try:
         if args.stage in ['0', 'all']:
             stage0_setup()
+
+            # 如果指定了 --crawl 參數，則執行爬蟲
+            if args.crawl:
+                stage0_crawl_pdfs(
+                    start_year=args.start_year,
+                    end_year=args.end_year,
+                    max_results=args.max_results,
+                    throttle_sec=args.throttle_sec
+                )
 
         if args.stage in ['1', 'all']:
             stage1_data_loading(use_semantic_chunking=args.semantic_chunking)

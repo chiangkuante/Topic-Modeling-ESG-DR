@@ -115,7 +115,39 @@ python main.py --stage 1
 python main.py --stage 2
 ```
 
-**使用語義分塊:**
+### 階段0: 爬取 ESG 報告（可選）
+
+使用 Brave Search API 自動爬取 S&P 500 公司的 ESG 報告：
+
+```bash
+# 爬取 2017-2018 年的報告
+python main.py --stage 0 --crawl --start-year 2017 --end-year 2018
+
+# 自訂爬蟲參數
+python main.py --stage 0 --crawl \
+  --start-year 2019 \
+  --end-year 2021 \
+  --max-results 10 \
+  --throttle-sec 1.5
+```
+
+**爬蟲參數說明:**
+- `--crawl`: 啟用爬蟲功能
+- `--start-year`: 起始年份（預設: 2017）
+- `--end-year`: 結束年份（預設: 2018）
+- `--max-results`: 每次搜尋的最大結果數（預設: 8）
+- `--throttle-sec`: API 請求間隔秒數（預設: 1.0）
+
+**前置需求:**
+1. 在 `.env` 文件中設定 `BRAVE_API_KEY`
+2. 確保 `data/sp500_2017-01-27.csv` 文件存在
+
+**輸出:**
+- PDF 文件: `data/raw/{ticker}/{year}/{filename}.pdf`
+- 下載清單: `data/metadata/esg_manifest.csv`
+
+### 使用語義分塊
+
 ```bash
 python main.py --stage 1 --semantic-chunking
 ```
@@ -130,11 +162,57 @@ jupyter notebook notebooks/main.ipynb
 
 在notebook中可以互動式地執行各個階段。
 
+## 完整命令行參數
+
+### 主要參數
+
+| 參數 | 類型 | 預設值 | 說明 |
+|------|------|--------|------|
+| `--stage` | str | `all` | 執行階段: `0`, `1`, `2`, `all` |
+| `--semantic-chunking` | flag | False | 使用語義分塊（需要 OpenAI API） |
+
+### 爬蟲相關參數（Stage 0）
+
+| 參數 | 類型 | 預設值 | 說明 |
+|------|------|--------|------|
+| `--crawl` | flag | False | 啟用 Brave Search API 爬蟲 |
+| `--start-year` | int | 2017 | 爬蟲起始年份 |
+| `--end-year` | int | 2018 | 爬蟲結束年份 |
+| `--max-results` | int | 8 | 每次搜尋的最大結果數 |
+| `--throttle-sec` | float | 1.0 | API 請求間隔秒數 |
+
+### 使用範例
+
+```bash
+# 1. 完整流程（不包含爬蟲）
+python main.py --stage all
+
+# 2. 只執行爬蟲
+python main.py --stage 0 --crawl --start-year 2020 --end-year 2022
+
+# 3. 爬蟲 + 資料處理 + 主題建模
+python main.py --stage 0 --crawl --start-year 2020 --end-year 2020
+python main.py --stage 1
+python main.py --stage 2
+
+# 4. 使用語義分塊進行資料處理
+python main.py --stage 1 --semantic-chunking
+
+# 5. 只重新訓練主題模型（使用緩存的嵌入向量）
+python main.py --stage 2
+```
+
 ## 階段說明
 
 ### 階段0: 環境設定
 - 檢查目錄結構
 - 驗證環境變數
+
+**階段0（可選）: ESG 報告爬蟲**
+- 使用 Brave Search API 搜尋 ESG 報告
+- 下載 PDF 文件
+- 生成下載清單（manifest）
+- 自動組織文件結構
 
 ### 階段1: 資料載入與預處理
 - 探索資料集結構
