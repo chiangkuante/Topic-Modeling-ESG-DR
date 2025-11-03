@@ -41,7 +41,7 @@ cp .env.example .env
 
 # 編輯 .env 並填入你的API金鑰
 # OPENAI_API_KEY=sk-xxx
-# BRAVE_KEY=xxx
+# BRAVE_API_KEY=xxx
 ```
 
 ## 方法一：使用命令行（推薦）

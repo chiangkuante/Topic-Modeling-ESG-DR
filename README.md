@@ -88,7 +88,7 @@ cp .env.example .env
 編輯 `.env` 檔案：
 
 ```
-BRAVE_KEY=your_brave_api_key_here
+BRAVE_API_KEY=your_brave_api_key_here
 OPENAI_API_KEY=your_openai_api_key_here
 EMBEDDING_MODEL=text-embedding-3-small
 LLM_MODEL=gpt-4o-mini
@@ -100,19 +100,19 @@ LLM_MODEL=gpt-4o-mini
 
 **執行所有階段:**
 ```bash
-python main.py --stage all
+uv run main.py --stage all
 ```
 
 **執行特定階段:**
 ```bash
 # 階段0: 環境設定
-python main.py --stage 0
+uv run main.py --stage 0
 
 # 階段1: 資料載入與預處理
-python main.py --stage 1
+uv run main.py --stage 1
 
 # 階段2: 主題建模
-python main.py --stage 2
+uv run main.py --stage 2
 ```
 
 ### 階段0: 爬取 ESG 報告（可選）
@@ -121,10 +121,13 @@ python main.py --stage 2
 
 ```bash
 # 爬取 2017-2018 年的報告
-python main.py --stage 0 --crawl --start-year 2017 --end-year 2018
+uv run main.py --stage 0 --crawl --start-year 2021 --end-year 2024
+
+# 爬取 2017-2024 年的報告（自訂參數）
+uv run main.py --stage 0 --crawl --start-year 2017 --end-year 2024 --max-results 3 --throttle-sec 1.1
 
 # 自訂爬蟲參數
-python main.py --stage 0 --crawl \
+uv run main.py --stage 0 --crawl \
   --start-year 2019 \
   --end-year 2021 \
   --max-results 10 \
@@ -149,7 +152,7 @@ python main.py --stage 0 --crawl \
 ### 使用語義分塊
 
 ```bash
-python main.py --stage 1 --semantic-chunking
+uv run main.py --stage 1 --semantic-chunking
 ```
 
 ### 使用Jupyter Notebook
@@ -185,21 +188,21 @@ jupyter notebook notebooks/main.ipynb
 
 ```bash
 # 1. 完整流程（不包含爬蟲）
-python main.py --stage all
+uv run main.py --stage all
 
 # 2. 只執行爬蟲
-python main.py --stage 0 --crawl --start-year 2020 --end-year 2022
+uv run main.py --stage 0 --crawl --start-year 2020 --end-year 2022
 
 # 3. 爬蟲 + 資料處理 + 主題建模
-python main.py --stage 0 --crawl --start-year 2020 --end-year 2020
-python main.py --stage 1
-python main.py --stage 2
+uv run main.py --stage 0 --crawl --start-year 2020 --end-year 2020
+uv run main.py --stage 1
+uv run main.py --stage 2
 
 # 4. 使用語義分塊進行資料處理
-python main.py --stage 1 --semantic-chunking
+uv run main.py --stage 1 --semantic-chunking
 
 # 5. 只重新訓練主題模型（使用緩存的嵌入向量）
-python main.py --stage 2
+uv run main.py --stage 2
 ```
 
 ## 階段說明
