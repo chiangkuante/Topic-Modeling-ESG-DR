@@ -10,10 +10,11 @@ import logging
 from pathlib import Path
 from dotenv import load_dotenv
 
+from src.config_loader import get_config, load_keywords
 from src.data_loader import DataLoader, load_corpus
 from src.topic_modeler import TopicModeler, load_topic_model
 from src.esg_crawler import (
-    read_sp500_csv, read_company_map, load_keywords,
+    read_sp500_csv, read_company_map,
     make_queries, brave_search, is_pdf_url, download_pdf,
     safe_filename, sha256_bytes, content_type_pdf
 )
@@ -31,6 +32,9 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# 載入配置
+config = get_config()
 
 
 def stage0_setup():
@@ -67,7 +71,7 @@ def stage0_setup():
     logger.info("階段 0 完成\n")
 
 
-def stage0_crawl_pdfs(start_year=2017, end_year=2018, max_results=8, throttle_sec=1.0):
+def stage0_crawl_pdfs():
     """階段0可選: 使用 Brave Search API 爬取 ESG PDF 報告"""
     logger.info("=" * 50)
     logger.info("階段 0 (可選): 爬取 ESG PDF 報告")
@@ -83,11 +87,15 @@ def stage0_crawl_pdfs(start_year=2017, end_year=2018, max_results=8, throttle_se
     import csv
     import time
 
-    # 設置路徑
-    root = "."
-    sp500_csv = os.path.join(root, "data", "sp500_2017-01-27.csv")
-    manifest_path = os.path.join(root, "data", "metadata", "esg_manifest.csv")
-    raw_root = os.path.join(root, "data", "raw")
+    # 從配置讀取參數
+    root = config.root
+    sp500_csv = config.sp500_csv
+    manifest_path = config.manifest_path
+    raw_root = config.raw_data_path
+    start_year = config.crawler_start_year
+    end_year = config.crawler_end_year
+    max_results = config.crawler_max_results
+    throttle_sec = config.crawler_throttle_sec
 
     # 檢查 SP500 CSV 是否存在
     if not os.path.exists(sp500_csv):
@@ -102,7 +110,7 @@ def stage0_crawl_pdfs(start_year=2017, end_year=2018, max_results=8, throttle_se
     kw = load_keywords(root)
     report_keywords = kw.get("report_keywords", [])
     tickers = read_sp500_csv(sp500_csv)
-    company_map = read_company_map(None)  # 可選的公司名稱映射
+    company_map = read_company_map(config.crawler_company_map)
 
     logger.info(f"爬取年份: {start_year}-{end_year}")
     logger.info(f"公司數量: {len(tickers)}")
@@ -181,28 +189,29 @@ def stage0_crawl_pdfs(start_year=2017, end_year=2018, max_results=8, throttle_se
     logger.info("=" * 50)
 
 
-def stage1_data_loading(use_semantic_chunking=False):
+def stage1_data_loading():
     """階段1: 資料載入與預處理"""
     logger.info("=" * 50)
     logger.info("階段 1: 資料載入與預處理")
     logger.info("=" * 50)
 
-    # 初始化DataLoader
+    # 從配置讀取參數並初始化DataLoader
     data_loader = DataLoader(
-        raw_data_path="./data/raw",
-        processed_data_path="./data/processed_corpus",
-        min_sentence_length=50,
-        max_chunk_tokens=512
+        raw_data_path=config.raw_data_path,
+        processed_data_path=config.processed_data_path,
+        min_sentence_length=config.data_loader_min_sentence_length,
+        max_chunk_tokens=config.data_loader_max_chunk_tokens,
+        boilerplate_keywords=config.data_loader_boilerplate_keywords
     )
 
     # 探索資料集
     stats = data_loader.explore_dataset()
     logger.info(f"資料集統計: {stats}")
 
-    # 建立語料庫
+    # 建立語料庫（使用配置中的 semantic_chunking 設定）
     corpus_df = data_loader.build_corpus(
         output_filename="corpus.csv",
-        use_semantic_chunking=use_semantic_chunking
+        use_semantic_chunking=config.semantic_chunking
     )
 
     logger.info(f"語料庫建立完成: {len(corpus_df)} 個文本塊")
@@ -217,25 +226,29 @@ def stage2_topic_modeling():
     logger.info("階段 2: 主題建模")
     logger.info("=" * 50)
 
-    # 載入語料庫
-    corpus_df = load_corpus("./data/processed_corpus/corpus.csv")
+    # 從配置讀取路徑並載入語料庫
+    corpus_path = os.path.join(config.processed_data_path, "corpus.csv")
+    corpus_df = load_corpus(corpus_path)
     texts = corpus_df['text'].tolist()
 
     logger.info(f"載入 {len(texts)} 個文本")
 
-    # 初始化TopicModeler
+    # 從配置讀取參數並初始化TopicModeler
     topic_modeler = TopicModeler(
-        models_path="./data/models",
-        results_path="./data/results",
-        embedding_model=os.getenv('EMBEDDING_MODEL', 'text-embedding-3-small'),
-        embedding_batch_size=100,
-        n_neighbors=15,
-        n_components=5,
-        min_cluster_size=40,
-        min_samples=10,
-        verbose=True,
-        n_jobs=20,  # 使用20個CPU核心
-        low_memory=False  # 高性能模式
+        models_path=config.models_path,
+        results_path=config.results_path,
+        embedding_model=config.topic_modeler_embedding_model,
+        embedding_batch_size=config.topic_modeler_embedding_batch_size,
+        n_neighbors=config.topic_modeler_umap_n_neighbors,
+        n_components=config.topic_modeler_umap_n_components,
+        min_dist=config.topic_modeler_umap_min_dist,
+        metric=config.topic_modeler_umap_metric,
+        min_cluster_size=config.topic_modeler_hdbscan_min_cluster_size,
+        min_samples=config.topic_modeler_hdbscan_min_samples,
+        cluster_selection_method=config.topic_modeler_hdbscan_cluster_selection_method,
+        n_jobs=config.topic_modeler_computing_n_jobs,
+        low_memory=config.topic_modeler_computing_low_memory,
+        verbose=config.topic_modeler_computing_verbose
     )
 
     # 生成嵌入
@@ -269,8 +282,12 @@ def stage2_topic_modeling():
 
 def main():
     """主函數"""
-    parser = argparse.ArgumentParser(description='ESG報告主題建模與數位韌性量化框架')
+    parser = argparse.ArgumentParser(
+        description='ESG報告主題建模與數位韌性量化框架',
+        epilog='注意: 除了 --stage 參數外，其他所有參數請在 config/config.yaml 中設定'
+    )
 
+    # 只保留 stage 參數
     parser.add_argument(
         '--stage',
         type=str,
@@ -279,68 +296,24 @@ def main():
         help='執行階段: 0=環境設定, 1=資料載入, 2=主題建模, all=全部'
     )
 
-    parser.add_argument(
-        '--semantic-chunking',
-        action='store_true',
-        help='使用語義分塊（需要OpenAI API）'
-    )
-
-    # Brave 爬蟲相關參數
-    parser.add_argument(
-        '--crawl',
-        action='store_true',
-        help='執行 Brave Search API 爬蟲（階段 0 可選）'
-    )
-
-    parser.add_argument(
-        '--start-year',
-        type=int,
-        default=2017,
-        help='爬蟲起始年份（預設: 2017）'
-    )
-
-    parser.add_argument(
-        '--end-year',
-        type=int,
-        default=2018,
-        help='爬蟲結束年份（預設: 2018）'
-    )
-
-    parser.add_argument(
-        '--max-results',
-        type=int,
-        default=8,
-        help='每次搜尋的最大結果數（預設: 8）'
-    )
-
-    parser.add_argument(
-        '--throttle-sec',
-        type=float,
-        default=1.0,
-        help='API 請求間隔秒數（預設: 1.0）'
-    )
-
     args = parser.parse_args()
 
     logger.info("=" * 50)
     logger.info("ESG報告主題建模與數位韌性量化框架")
     logger.info("=" * 50)
+    logger.info(f"配置文件: {config.config_path}")
+    logger.info(f"執行階段: {args.stage}")
 
     try:
         if args.stage in ['0', 'all']:
             stage0_setup()
 
-            # 如果指定了 --crawl 參數，則執行爬蟲
-            if args.crawl:
-                stage0_crawl_pdfs(
-                    start_year=args.start_year,
-                    end_year=args.end_year,
-                    max_results=args.max_results,
-                    throttle_sec=args.throttle_sec
-                )
+            # 根據配置決定是否執行爬蟲
+            if config.crawl:
+                stage0_crawl_pdfs()
 
         if args.stage in ['1', 'all']:
-            stage1_data_loading(use_semantic_chunking=args.semantic_chunking)
+            stage1_data_loading()
 
         if args.stage in ['2', 'all']:
             stage2_topic_modeling()

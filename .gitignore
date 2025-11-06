@@ -42,6 +42,7 @@ data/processed_corpus/*.csv
 data/models/
 data/results/
 data/metadata/*.csv
+data/sec-edgar-filings/
 
 # Jupyter Notebook
 .ipynb_checkpoints/

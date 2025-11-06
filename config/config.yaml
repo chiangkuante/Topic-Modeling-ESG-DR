@@ -1,0 +1,142 @@
+# ESG Topic Modeling Configuration File
+# 所有參數集中配置，除了 stage 參數需要在 CLI 指定外，其他都在此設定
+
+# ===== 路徑設定 =====
+paths:
+  root: "."
+  raw_data: "./data/raw"
+  processed_data: "./data/processed_corpus"
+  models: "./data/models"
+  results: "./data/results"
+  # S&P 500 公司列表 CSV 檔案路徑（可修改為其他年份的檔案）
+  sp500_csv: "./data/sp500_2025.csv"  # 可改為 sp500_2017-01-27.csv 或其他檔案
+  manifest: "./data/metadata/esg_manifest.csv"
+
+# ===== Pipeline 設定 =====
+pipeline:
+  # 是否使用語義分塊（需要 OpenAI API）
+  semantic_chunking: false
+
+  # 是否執行爬蟲（階段 0 可選）
+  crawl: false
+
+# ===== Crawler 設定 =====
+crawler:
+  # 爬取年份範圍
+  start_year: 2013
+  end_year: 2024
+
+  # 公司名稱映射文件（可選）
+  company_map: null
+
+  # 搜尋參數
+  max_results: 2  # 每頁最大結果數（<=20）
+  max_results_total: 2  # 每個查詢的總結果數
+
+  # 網路與重試設定
+  throttle_sec: 1.0  # 基礎請求間隔秒數
+  max_throttle_sec: 8.0  # 最大請求間隔秒數
+  retry_total: 5  # 最大重試次數
+  retry_backoff: 1.0  # 重試退避因子
+  http_timeout: 45.0  # HTTP 請求超時時間（秒）
+
+  # PDF 下載設定
+  max_pdf_bytes: 41943040  # 40 MB = 40 * 1024 * 1024
+
+  # 機器人與提取設定
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0 Safari/537.36"
+  respect_robots: false  # 是否遵守 robots.txt
+  max_html_probe_depth: 2  # HTML 跳轉最大深度
+
+# ===== Data Loader 設定 =====
+data_loader:
+  # 文本處理參數
+  min_sentence_length: 50
+  max_chunk_tokens: 512
+
+  # 樣板化關鍵詞列表
+  boilerplate_keywords:
+    - "forward-looking statement"
+    - "safe harbor"
+    - "securities and exchange commission"
+    - "this report contains"
+    - "table of contents"
+
+# ===== Topic Modeler 設定 =====
+topic_modeler:
+  # 嵌入模型設定
+  embedding_model: "text-embedding-3-small"  # 可被環境變數 EMBEDDING_MODEL 覆蓋
+  embedding_batch_size: 100
+
+  # UMAP 參數
+  umap:
+    n_neighbors: 15
+    n_components: 5
+    min_dist: 0.0
+    metric: "cosine"
+
+  # HDBSCAN 參數
+  hdbscan:
+    min_cluster_size: 40
+    min_samples: 10
+    cluster_selection_method: "eom"
+
+  # CountVectorizer 參數
+  vectorizer:
+    max_features: 1000
+    ngram_range: [1, 2]
+    custom_stop_words:
+      # Company Names
+      - "cisco"
+      - "marriott"
+      - "kpmg"
+      - "clorox"
+      - "general motors"
+      - "philip morris"
+      - "sysco"
+      - "ebay"
+      - "gm"
+      - "morris"
+      # General Terms
+      - "firm"
+      - "report"
+      - "company"
+      - "business"
+      - "services"
+      - "products"
+      - "industry"
+      - "employees"
+      - "workforce"
+      - "safety"
+      - "training"
+      - "compliance"
+      - "program"
+      # Year-related Terms
+      - "2017"
+      - "2018"
+      - "2019"
+      - "2020"
+      - "2021"
+      - "2022"
+      # Location/Region Terms
+      - "asia"
+      - "europe"
+      - "america"
+      - "pacific"
+      - "latin america"
+      - "latin"
+      - "united states"
+      - "uk"
+      - "us"
+
+  # BERTopic 參數
+  bertopic:
+    top_n_words: 10
+    verbose: true
+    calculate_probabilities: true
+
+  # 並行計算參數
+  computing:
+    n_jobs: 20  # CPU 核心數，-1 為使用全部
+    low_memory: false  # 高性能模式
+    verbose: true

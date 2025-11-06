@@ -31,48 +31,97 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# 延遲載入配置，避免循環導入
+_config = None
+
+def _get_config():
+    """延遲載入配置"""
+    global _config
+    if _config is None:
+        try:
+            from .config_loader import get_config
+            _config = get_config()
+        except Exception:
+            _config = None
+    return _config
+
 
 class TopicModeler:
     """主題建模類別"""
 
     def __init__(
         self,
-        models_path: str = "./data/models",
-        results_path: str = "./data/results",
-        embedding_model: str = "text-embedding-3-small",
-        embedding_batch_size: int = 100,
+        models_path: Optional[str] = None,
+        results_path: Optional[str] = None,
+        embedding_model: Optional[str] = None,
+        embedding_batch_size: Optional[int] = None,
         openai_api_key: Optional[str] = None,
         # UMAP參數
-        n_neighbors: int = 15,
-        n_components: int = 5,
-        min_dist: float = 0.0,
-        metric: str = 'cosine',
+        n_neighbors: Optional[int] = None,
+        n_components: Optional[int] = None,
+        min_dist: Optional[float] = None,
+        metric: Optional[str] = None,
         # HDBSCAN參數
-        min_cluster_size: int = 15,
-        min_samples: int = 10,
-        cluster_selection_method: str = 'eom',
+        min_cluster_size: Optional[int] = None,
+        min_samples: Optional[int] = None,
+        cluster_selection_method: Optional[str] = None,
         # 並行計算參數
-        n_jobs: int = -1,
-        low_memory: bool = False,
-        verbose: bool = False
+        n_jobs: Optional[int] = None,
+        low_memory: Optional[bool] = None,
+        verbose: Optional[bool] = None
     ):
         """
         初始化主題建模器
 
         參數:
-            models_path: 模型保存路徑
-            results_path: 結果保存路徑
-            embedding_model: 嵌入模型名稱
-            embedding_batch_size: 嵌入批次大小
+            models_path: 模型保存路徑（如果為 None，從配置讀取）
+            results_path: 結果保存路徑（如果為 None，從配置讀取）
+            embedding_model: 嵌入模型名稱（如果為 None，從配置讀取）
+            embedding_batch_size: 嵌入批次大小（如果為 None，從配置讀取）
             openai_api_key: OpenAI API金鑰
-            n_neighbors: UMAP鄰居數
-            n_components: UMAP維度數
-            min_dist: UMAP最小距離
-            metric: UMAP距離度量
-            min_cluster_size: HDBSCAN最小聚類大小
-            min_samples: HDBSCAN最小樣本數
-            cluster_selection_method: HDBSCAN聚類選擇方法
+            n_neighbors: UMAP鄰居數（如果為 None，從配置讀取）
+            n_components: UMAP維度數（如果為 None，從配置讀取）
+            min_dist: UMAP最小距離（如果為 None，從配置讀取）
+            metric: UMAP距離度量（如果為 None，從配置讀取）
+            min_cluster_size: HDBSCAN最小聚類大小（如果為 None，從配置讀取）
+            min_samples: HDBSCAN最小樣本數（如果為 None，從配置讀取）
+            cluster_selection_method: HDBSCAN聚類選擇方法（如果為 None，從配置讀取）
+            n_jobs: CPU核心數（如果為 None，從配置讀取）
+            low_memory: 記憶體模式（如果為 None，從配置讀取）
+            verbose: 詳細輸出（如果為 None，從配置讀取）
         """
+        # 嘗試從配置讀取預設值
+        config = _get_config()
+
+        if models_path is None:
+            models_path = config.models_path if config else "./data/models"
+        if results_path is None:
+            results_path = config.results_path if config else "./data/results"
+        if embedding_model is None:
+            embedding_model = config.topic_modeler_embedding_model if config else "text-embedding-3-small"
+        if embedding_batch_size is None:
+            embedding_batch_size = config.topic_modeler_embedding_batch_size if config else 100
+        if n_neighbors is None:
+            n_neighbors = config.topic_modeler_umap_n_neighbors if config else 15
+        if n_components is None:
+            n_components = config.topic_modeler_umap_n_components if config else 5
+        if min_dist is None:
+            min_dist = config.topic_modeler_umap_min_dist if config else 0.0
+        if metric is None:
+            metric = config.topic_modeler_umap_metric if config else 'cosine'
+        if min_cluster_size is None:
+            min_cluster_size = config.topic_modeler_hdbscan_min_cluster_size if config else 15
+        if min_samples is None:
+            min_samples = config.topic_modeler_hdbscan_min_samples if config else 10
+        if cluster_selection_method is None:
+            cluster_selection_method = config.topic_modeler_hdbscan_cluster_selection_method if config else 'eom'
+        if n_jobs is None:
+            n_jobs = config.topic_modeler_computing_n_jobs if config else -1
+        if low_memory is None:
+            low_memory = config.topic_modeler_computing_low_memory if config else False
+        if verbose is None:
+            verbose = config.topic_modeler_computing_verbose if config else False
+
         self.models_path = Path(models_path)
         self.results_path = Path(results_path)
         self.embedding_model = embedding_model
@@ -219,21 +268,26 @@ class TopicModeler:
         )
 
         # 配置CountVectorizer with custom stop words
-        # 自定義停用詞列表
-        custom_stop_words = [
-            # Company Names
-            'cisco', 'marriott', 'kpmg', 'clorox', 'general motors', 'philip morris',
-            'sysco', 'ebay', 'gm', 'morris',
-            # General Terms
-            'firm', 'report', 'company', 'business', 'services', 'products',
-            'industry', 'employees', 'workforce', 'safety', 'training',
-            'compliance', 'program',
-            # Year-related Terms
-            '2017', '2018', '2019', '2020', '2021', '2022',
-            # Location/Region Terms
-            'asia', 'europe', 'america', 'pacific', 'latin america', 'latin',
-            'united states', 'uk', 'us'
-        ]
+        # 從配置讀取自定義停用詞列表
+        config = _get_config()
+        custom_stop_words = []
+
+        if config:
+            custom_stop_words = config.topic_modeler_vectorizer_custom_stop_words
+            max_features = config.topic_modeler_vectorizer_max_features
+            ngram_range = config.topic_modeler_vectorizer_ngram_range
+        else:
+            # 預設值
+            custom_stop_words = [
+                'cisco', 'marriott', 'kpmg', 'clorox', 'general motors', 'philip morris',
+                'sysco', 'ebay', 'gm', 'morris', 'firm', 'report', 'company', 'business',
+                'services', 'products', 'industry', 'employees', 'workforce', 'safety',
+                'training', 'compliance', 'program', '2017', '2018', '2019', '2020',
+                '2021', '2022', 'asia', 'europe', 'america', 'pacific', 'latin america',
+                'latin', 'united states', 'uk', 'us'
+            ]
+            max_features = 1000
+            ngram_range = (1, 2)
 
         # 合併英文停用詞和自定義停用詞
         from sklearn.feature_extraction import text
@@ -241,9 +295,9 @@ class TopicModeler:
         all_stop_words = list(english_stop_words.union(set(custom_stop_words)))
 
         vectorizer_model = CountVectorizer(
-            max_features=1000,
+            max_features=max_features,
             stop_words=all_stop_words,
-            ngram_range=(1, 2)
+            ngram_range=ngram_range
         )
 
         # 初始化BERTopic

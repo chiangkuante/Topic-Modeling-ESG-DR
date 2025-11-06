@@ -1,0 +1,10 @@
+# ESG Report Keywords Configuration
+# 用於爬蟲搜尋的報告關鍵詞列表
+
+report_keywords:
+  - "sustainability report"
+  - "ESG report"
+  - "corporate responsibility report"
+  - "CSR report"
+  - "non-financial report"
+  - "sustainability accounting"

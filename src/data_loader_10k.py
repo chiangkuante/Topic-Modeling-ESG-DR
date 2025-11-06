@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-data_loader.py
-資料載入與預處理模組
+data_loader_10k.py
+10-K 報告資料載入與預處理模組
+從 SEC Edgar filings 提取資料
 """
 import os
+import re
 import logging
 import pandas as pd
-import PyPDF2
-import pdfplumber
 from pathlib import Path
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Optional
+from bs4 import BeautifulSoup
 import nltk
 from tqdm import tqdm
 import tiktoken
@@ -42,8 +43,8 @@ def _get_config():
     return _config
 
 
-class DataLoader:
-    """資料載入與預處理類別"""
+class DataLoader10K:
+    """10-K 報告資料載入與預處理類別"""
 
     def __init__(
         self,
@@ -55,7 +56,7 @@ class DataLoader:
         openai_api_key: Optional[str] = None
     ):
         """
-        初始化資料載入器
+        初始化10-K資料載入器
 
         參數:
             raw_data_path: 原始資料路徑（如果為 None，從配置讀取）
@@ -69,7 +70,7 @@ class DataLoader:
         config = _get_config()
 
         if raw_data_path is None:
-            raw_data_path = config.raw_data_path if config else "./data/raw"
+            raw_data_path = "./data/sec-edgar-filings"
         if processed_data_path is None:
             processed_data_path = config.processed_data_path if config else "./data/processed_corpus"
         if min_sentence_length is None:
@@ -82,7 +83,11 @@ class DataLoader:
                 "safe harbor",
                 "securities and exchange commission",
                 "this report contains",
-                "table of contents"
+                "table of contents",
+                "item 1a. risk factors",
+                "item 1b. unresolved staff comments",
+                "page number",
+                "sec file number"
             ]
 
         self.raw_data_path = Path(raw_data_path)
@@ -94,29 +99,35 @@ class DataLoader:
 
         # 確保nltk資源已下載
         try:
+            nltk.data.find('tokenizers/punkt_tab')
+        except LookupError:
+            logger.info("下載 NLTK punkt_tab 資源...")
+            nltk.download('punkt_tab', quiet=True)
+        try:
             nltk.data.find('tokenizers/punkt')
         except LookupError:
+            logger.info("下載 NLTK punkt 資源...")
             nltk.download('punkt', quiet=True)
 
         # 建立輸出目錄
         self.processed_data_path.mkdir(parents=True, exist_ok=True)
 
-        logger.info("DataLoader初始化完成")
+        logger.info("DataLoader10K初始化完成")
 
     def explore_dataset(self) -> Dict:
         """
-        探索資料集結構
+        探索10-K資料集結構
 
         返回:
             資料集統計資訊字典
         """
-        logger.info("開始探索資料集...")
+        logger.info("開始探索10-K資料集...")
 
         stats = {
             'total_companies': 0,
             'total_files': 0,
             'companies': {},
-            'year_range': set()
+            'filing_years': set()
         }
 
         if not self.raw_data_path.exists():
@@ -129,65 +140,111 @@ class DataLoader:
                 continue
 
             ticker = company_dir.name
-            stats['companies'][ticker] = {}
+            stats['companies'][ticker] = 0
             stats['total_companies'] += 1
 
-            # 遍歷年份目錄
-            for year_dir in company_dir.iterdir():
-                if not year_dir.is_dir():
+            # 遍歷報告類型目錄（10-K）
+            form_dir = company_dir / "10-K"
+            if not form_dir.exists():
+                continue
+
+            # 遍歷各個提交目錄
+            for filing_dir in form_dir.iterdir():
+                if not filing_dir.is_dir():
                     continue
 
-                year = year_dir.name
-                stats['year_range'].add(year)
+                # 檢查是否有 full-submission.txt
+                submission_file = filing_dir / "full-submission.txt"
+                if submission_file.exists():
+                    stats['companies'][ticker] += 1
+                    stats['total_files'] += 1
 
-                # 統計PDF文件數量
-                pdf_files = list(year_dir.glob("*.pdf"))
-                file_count = len(pdf_files)
+                    # 嘗試從檔案名稱提取年份
+                    try:
+                        year = self._extract_year_from_filing(submission_file)
+                        if year:
+                            stats['filing_years'].add(year)
+                    except:
+                        pass
 
-                if file_count > 0:
-                    stats['companies'][ticker][year] = file_count
-                    stats['total_files'] += file_count
-
-        stats['year_range'] = sorted(list(stats['year_range']))
+        stats['filing_years'] = sorted(list(stats['filing_years']))
 
         logger.info(f"資料集探索完成: 共 {stats['total_companies']} 家公司, "
-                   f"{stats['total_files']} 個文件")
-        logger.info(f"年份範圍: {stats['year_range']}")
+                   f"{stats['total_files']} 個10-K文件")
+        if stats['filing_years']:
+            logger.info(f"提交年份範圍: {stats['filing_years']}")
 
         return stats
 
-    def extract_text_from_pdf(self, pdf_path: Path) -> Optional[str]:
+    def _extract_year_from_filing(self, file_path: Path) -> Optional[str]:
+        """從10-K提交文件中提取年份"""
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                # 讀取前1000個字符來查找年份資訊
+                content = f.read(1000)
+
+                # 查找 "CONFORMED PERIOD OF REPORT:" 行
+                match = re.search(r'CONFORMED PERIOD OF REPORT:\s*(\d{4})\d{4}', content)
+                if match:
+                    return match.group(1)
+
+        except Exception as e:
+            logger.debug(f"無法從 {file_path} 提取年份: {e}")
+
+        return None
+
+    def extract_text_from_10k(self, file_path: Path) -> Optional[str]:
         """
-        從PDF文件提取文本
+        從10-K提交文件提取文本
 
         參數:
-            pdf_path: PDF文件路徑
+            file_path: 10-K文件路徑
 
         返回:
             提取的文本或None
         """
         try:
-            # 先嘗試使用pdfplumber（更準確）
-            with pdfplumber.open(pdf_path) as pdf:
-                text = ""
-                for page in pdf.pages:
-                    page_text = page.extract_text()
-                    if page_text:
-                        text += page_text + "\n"
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
 
-                if text.strip():
+            # 分離 header 和主要內容
+            # 查找 </SEC-HEADER> 標記
+            header_end = content.find('</SEC-HEADER>')
+            if header_end != -1:
+                content = content[header_end + len('</SEC-HEADER>'):]
+
+            # 移除 XML/XBRL 標記
+            # 使用 BeautifulSoup 解析 HTML/XML
+            # 嘗試不同的解析器
+            try:
+                soup = BeautifulSoup(content, 'html.parser')
+            except Exception:
+                try:
+                    soup = BeautifulSoup(content, 'lxml')
+                except Exception:
+                    # 如果解析失敗，使用簡單的文本提取
+                    logger.warning(f"無法使用 BeautifulSoup 解析 {file_path}，使用簡單文本提取")
+                    # 移除 HTML 標記
+                    import re
+                    text = re.sub(r'<[^>]+>', ' ', content)
                     return text
 
-            # 如果pdfplumber失敗，嘗試PyPDF2
-            with open(pdf_path, 'rb') as file:
-                reader = PyPDF2.PdfReader(file)
-                text = ""
-                for page in reader.pages:
-                    text += page.extract_text() + "\n"
-                return text if text.strip() else None
+            # 移除 script 和 style 元素
+            for script in soup(["script", "style"]):
+                script.decompose()
+
+            # 取得文本
+            text = soup.get_text()
+
+            # 清理多餘的空白字符
+            lines = (line.strip() for line in text.splitlines())
+            chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
+            text = ' '.join(chunk for chunk in chunks if chunk)
+
+            return text if text else None
 
         except Exception as e:
-            logger.error(f"無法提取PDF文本 {pdf_path}: {e}")
+            logger.error(f"無法提取10-K文本 {file_path}: {e}")
             return None
 
     def clean_text(self, text: str) -> str:
@@ -205,6 +262,13 @@ class DataLoader:
 
         # 移除多餘的空白和換行
         text = " ".join(text.split())
+
+        # 移除特殊字符和數字串（保留基本標點）
+        text = re.sub(r'\s+', ' ', text)
+        text = re.sub(r'[^\w\s.,;:!?\-\(\)]+', ' ', text)
+
+        # 移除過長的數字序列
+        text = re.sub(r'\d{10,}', '', text)
 
         return text
 
@@ -233,6 +297,11 @@ class DataLoader:
             # 過濾樣板化內容
             sentence_lower = sentence.lower()
             if any(keyword in sentence_lower for keyword in self.boilerplate_keywords):
+                continue
+
+            # 過濾包含過多數字的句子（可能是表格數據）
+            digit_ratio = sum(c.isdigit() for c in sentence) / len(sentence)
+            if digit_ratio > 0.5:
                 continue
 
             filtered_sentences.append(sentence)
@@ -348,29 +417,27 @@ class DataLoader:
 
     def process_file(
         self,
-        pdf_path: Path,
+        file_path: Path,
         ticker: str,
-        year: str,
         use_semantic_chunking: bool = False
     ) -> List[Dict]:
         """
-        處理單個PDF文件
+        處理單個10-K文件
 
         參數:
-            pdf_path: PDF文件路徑
+            file_path: 10-K文件路徑
             ticker: 公司代碼
-            year: 年份
             use_semantic_chunking: 是否使用語義分塊
 
         返回:
             處理後的文本塊列表（包含元數據）
         """
-        logger.info(f"處理文件: {pdf_path}")
+        logger.info(f"處理文件: {file_path}")
 
         # 提取文本
-        raw_text = self.extract_text_from_pdf(pdf_path)
+        raw_text = self.extract_text_from_10k(file_path)
         if not raw_text:
-            logger.warning(f"無法從 {pdf_path} 提取文本")
+            logger.warning(f"無法從 {file_path} 提取文本")
             return []
 
         # 清理文本
@@ -379,7 +446,7 @@ class DataLoader:
         # 過濾句子
         filtered_sentences = self.filter_sentences(cleaned_text)
         if not filtered_sentences:
-            logger.warning(f"{pdf_path} 沒有有效句子")
+            logger.warning(f"{file_path} 沒有有效句子")
             return []
 
         # 文本分塊
@@ -388,68 +455,86 @@ class DataLoader:
         else:
             chunks = self.chunk_text_simple(filtered_sentences)
 
+        # 提取年份
+        year = self._extract_year_from_filing(file_path)
+
         # 添加元數據
         processed_chunks = []
         for chunk in chunks:
             processed_chunks.append({
                 'ticker': ticker,
-                'year': year,
+                'year': year or 'unknown',
                 'text': chunk,
-                'source_file': pdf_path.name
+                'source_file': file_path.name,
+                'filing_type': '10-K'
             })
 
-        logger.info(f"文件 {pdf_path.name} 處理完成: {len(chunks)} 個chunks")
+        logger.info(f"文件 {file_path.name} 處理完成: {len(chunks)} 個chunks")
 
         return processed_chunks
 
     def build_corpus(
         self,
-        output_filename: str = "corpus.csv",
-        use_semantic_chunking: bool = False
+        output_filename: str = "corpus_10k.csv",
+        use_semantic_chunking: bool = False,
+        tickers: Optional[List[str]] = None
     ) -> pd.DataFrame:
         """
-        建立最終語料庫
+        建立10-K語料庫
 
         參數:
             output_filename: 輸出檔名
             use_semantic_chunking: 是否使用語義分塊
+            tickers: 要處理的公司代碼列表（如果為 None，處理全部）
 
         返回:
             語料庫DataFrame
         """
-        logger.info("開始建立語料庫...")
+        logger.info("開始建立10-K語料庫...")
 
         all_chunks = []
         stats = {'total_files': 0, 'total_chunks': 0, 'failed_files': 0}
 
-        # 遍歷所有PDF文件
-        for company_dir in tqdm(list(self.raw_data_path.iterdir()), desc="處理公司"):
+        # 遍歷公司目錄
+        company_dirs = list(self.raw_data_path.iterdir())
+
+        # 如果指定了特定公司，只處理這些公司
+        if tickers:
+            company_dirs = [d for d in company_dirs if d.name in tickers]
+
+        for company_dir in tqdm(company_dirs, desc="處理公司"):
             if not company_dir.is_dir():
                 continue
 
             ticker = company_dir.name
 
-            for year_dir in company_dir.iterdir():
-                if not year_dir.is_dir():
+            # 10-K目錄
+            form_dir = company_dir / "10-K"
+            if not form_dir.exists():
+                continue
+
+            # 遍歷各個提交
+            for filing_dir in form_dir.iterdir():
+                if not filing_dir.is_dir():
                     continue
 
-                year = year_dir.name
+                submission_file = filing_dir / "full-submission.txt"
+                if not submission_file.exists():
+                    continue
 
-                for pdf_file in year_dir.glob("*.pdf"):
-                    stats['total_files'] += 1
+                stats['total_files'] += 1
 
-                    chunks = self.process_file(
-                        pdf_file,
-                        ticker,
-                        year,
-                        use_semantic_chunking=use_semantic_chunking
-                    )
+                chunks = self.process_file(
+                    submission_file,
+                    ticker,
+                    use_semantic_chunking=use_semantic_chunking
+                )
 
-                    if chunks:
-                        all_chunks.extend(chunks)
-                        stats['total_chunks'] += len(chunks)
-                    else:
-                        stats['failed_files'] += 1
+                if chunks:
+                    all_chunks.extend(chunks)
+                    stats['total_chunks'] += len(chunks)
+                else:
+                    stats['failed_files'] += 1
 
         # 建立DataFrame
         corpus_df = pd.DataFrame(all_chunks)
@@ -458,7 +543,7 @@ class DataLoader:
         output_path = self.processed_data_path / output_filename
         corpus_df.to_csv(output_path, index=False, encoding='utf-8')
 
-        logger.info(f"語料庫建立完成!")
+        logger.info(f"10-K語料庫建立完成!")
         logger.info(f"總文件數: {stats['total_files']}")
         logger.info(f"總chunks數: {stats['total_chunks']}")
         logger.info(f"失敗文件數: {stats['failed_files']}")
@@ -468,9 +553,9 @@ class DataLoader:
 
 
 # 便捷函數
-def load_corpus(corpus_path: str = "./data/processed_corpus/corpus.csv") -> pd.DataFrame:
+def load_corpus_10k(corpus_path: str = "./data/processed_corpus/corpus_10k.csv") -> pd.DataFrame:
     """
-    載入已處理的語料庫
+    載入已處理的10-K語料庫
 
     參數:
         corpus_path: 語料庫文件路徑
@@ -478,7 +563,7 @@ def load_corpus(corpus_path: str = "./data/processed_corpus/corpus.csv") -> pd.D
     返回:
         語料庫DataFrame
     """
-    logger.info(f"載入語料庫: {corpus_path}")
+    logger.info(f"載入10-K語料庫: {corpus_path}")
     df = pd.read_csv(corpus_path, encoding='utf-8')
     logger.info(f"語料庫載入完成: {len(df)} 個文本塊")
     return df
